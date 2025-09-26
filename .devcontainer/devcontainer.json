@@ -1,0 +1,22 @@
+{
+    "name": "net-mux dev container",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "vadimcn.vscode-lldb",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates"
+            ],
+            "settings": {
+                "editor.formatOnSave": true,
+                "rust-analyzer.check.command": "clippy",
+            }
+        }
+    },
+    "remoteUser": "vscode",
+    "postCreateCommand": "sh -x ${containerWorkspaceFolder}/.devcontainer/setup.sh"
+}
