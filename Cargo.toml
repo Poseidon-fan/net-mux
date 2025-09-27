@@ -8,7 +8,6 @@ documentation = "https://docs.rs/net-mux"
 readme = "README.md"
 repository = "https://github.com/poseidon-fan/net-mux"
 license = "MIT"
-license-file = "LICENSE"
 keywords = ["net", "multiplexing", "async", "tokio"]
 categories = ["asynchronous", "network-programming"]
 exclude = [".devcontainer/"]
