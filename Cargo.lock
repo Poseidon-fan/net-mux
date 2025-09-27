@@ -163,6 +163,7 @@ name = "net-mux"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "parking_lot",
  "thiserror",
  "tokio",
  "tokio-util",

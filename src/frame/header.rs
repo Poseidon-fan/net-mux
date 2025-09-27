@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{consts::Version, error::Error};
+use crate::{StreamId, consts::Version, error::Error};
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -20,7 +20,6 @@ pub(crate) enum Cmd {
 }
 
 pub(crate) type DataLength = u16;
-pub(crate) type StreamId = u32;
 
 pub(crate) const HEADER_LENGTH: usize = mem::size_of::<Header>();
 
