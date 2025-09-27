@@ -11,7 +11,7 @@ pub(crate) struct Header {
     pub stream_id: StreamId,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[repr(u8)]
 pub(crate) enum Cmd {
     Syn = 0x01,

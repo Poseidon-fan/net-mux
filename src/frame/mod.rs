@@ -1,14 +1,12 @@
 mod header;
 
-use crate::{
-    consts::PROTOCOL_V0,
-    error::Error,
-    frame::header::{HEADER_LENGTH, Header},
-};
+use crate::{consts::PROTOCOL_V0, error::Error};
 use tokio_util::{
     bytes::{Buf, BufMut, BytesMut},
     codec::{Decoder, Encoder},
 };
+
+pub(crate) use header::*;
 
 pub(crate) struct Frame {
     pub header: Header,
@@ -16,6 +14,12 @@ pub(crate) struct Frame {
 }
 
 pub(crate) struct FrameCodec;
+
+impl Frame {
+    pub fn frame_len(&self) -> usize {
+        HEADER_LENGTH + self.header.data_length as usize
+    }
+}
 
 impl Decoder for FrameCodec {
     type Item = Frame;

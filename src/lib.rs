@@ -12,3 +12,4 @@ mod stream;
 pub use alloc::StreamId;
 pub use config::Config;
 pub use session::Session;
+pub use stream::Stream;
