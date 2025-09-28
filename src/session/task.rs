@@ -69,23 +69,16 @@ pub(crate) async fn start_frame_dispatch_loop(
 }
 
 pub(crate) async fn start_stream_close_listen(
-    mut close_rx: mpsc::UnboundedReceiver<(StreamId, Option<()>, Option<()>)>,
+    mut close_rx: mpsc::UnboundedReceiver<StreamId>,
     stream_manager: Arc<StreamManager>,
     mut shutdown_rx: broadcast::Receiver<()>,
 ) {
     loop {
         select! {
-            close = close_rx.recv() => {
-                match close {
-                    Some((stream_id, close_read, close_write)) => {
-                        // TODO(Poseidon): handle error
-                        let _ = stream_manager.close_stream_status(stream_id, close_read, close_write);
-                    }
-                    None => {
-                        return;
-                    }
-                }
+            Some(stream_id) = close_rx.recv() => {
+                let _ = stream_manager.remove_stream(stream_id);
             }
+
             _ = shutdown_rx.recv() => {
                 return;
             }

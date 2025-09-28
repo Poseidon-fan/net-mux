@@ -25,7 +25,7 @@ pub struct Session {
 
     // contains here to copy to new Stream
     msg_tx: mpsc::Sender<Message>,
-    close_tx: mpsc::UnboundedSender<(StreamId, Option<()>, Option<()>)>,
+    close_tx: mpsc::UnboundedSender<StreamId>,
 }
 
 impl Session {

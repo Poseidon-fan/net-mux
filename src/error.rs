@@ -18,4 +18,8 @@ pub enum Error {
     StreamNotFound(u32),
     #[error("failed to send frame to stream: {0}")]
     SendFrameFailed(#[from] tokio::sync::mpsc::error::SendError<Frame>),
+    #[error("stream {0} not writable")]
+    StreamNotWritable(u32),
+    #[error("stream {0} not readable")]
+    StreamNotReadable(u32),
 }

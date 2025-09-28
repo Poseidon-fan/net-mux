@@ -163,6 +163,7 @@ dependencies = [
 name = "net-mux"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "futures-util",
  "parking_lot",
  "thiserror",
