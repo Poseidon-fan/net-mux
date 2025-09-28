@@ -1,17 +1,23 @@
 mod stream_manager;
 mod task;
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
+use parking_lot::Once;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
     sync::{broadcast, mpsc},
 };
 
 use crate::{
-    Config, StreamId,
+    Config, Stream, StreamId,
     alloc::{EVEN_START_STREAM_ID, ODD_START_STREAM_ID, StreamIdAllocator},
     consts::{CLIENT_MODE, SERVER_MODE, SessionMode},
+    error::Error,
+    frame::Frame,
     msg::Message,
     session::stream_manager::StreamManager,
 };
@@ -21,7 +27,11 @@ pub struct Session {
     stream_id_allocator: StreamIdAllocator,
     stream_manager: Arc<StreamManager>,
 
+    stream_creation_rx: mpsc::UnboundedReceiver<StreamId>,
+
     shutdown_tx: broadcast::Sender<()>,
+    shutdown_once: Once,
+    is_shutdown: AtomicBool,
 
     // contains here to copy to new Stream
     msg_tx: mpsc::Sender<Message>,
@@ -35,8 +45,9 @@ impl Session {
         mode: SessionMode,
     ) -> Self {
         let (conn_reader, conn_writer) = io::split(conn);
-        let (msg_tx, msg_rx) = mpsc::channel(config.send_window);
+        let (msg_tx, msg_rx) = mpsc::channel(config.conn_send_window_size);
         let (close_tx, close_rx) = mpsc::unbounded_channel();
+        let (stream_creation_tx, stream_creation_rx) = mpsc::unbounded_channel();
         let (shutdown_tx, shutdown_rx1) = broadcast::channel(1);
         let shutdown_rx2 = shutdown_tx.subscribe();
         let shutdown_rx3 = shutdown_tx.subscribe();
@@ -47,8 +58,11 @@ impl Session {
                 SERVER_MODE => ODD_START_STREAM_ID,
                 CLIENT_MODE => EVEN_START_STREAM_ID,
             }),
-            stream_manager: Arc::new(StreamManager::new()),
+            stream_manager: Arc::new(StreamManager::new(stream_creation_tx)),
+            stream_creation_rx,
             shutdown_tx,
+            shutdown_once: Once::new(),
+            is_shutdown: AtomicBool::new(false),
             msg_tx,
             close_tx,
         };
@@ -70,5 +84,47 @@ impl Session {
         ));
 
         session
+    }
+
+    pub async fn open(&self) -> Result<Stream, Error> {
+        if self.is_shutdown.load(Ordering::SeqCst) {
+            return Err(Error::SessionClosed);
+        }
+        let shutdown_rx = self.shutdown_tx.subscribe();
+        let close_tx = self.close_tx.clone();
+        let msg_tx = self.msg_tx.clone();
+        let stream_id = self.stream_id_allocator.allocate();
+        let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
+
+        let stream = Stream::new(stream_id, shutdown_rx, msg_tx, frame_rx, close_tx);
+        stream.send_frame(Frame::new_syn(stream_id)).await?;
+        self.stream_manager.add_stream(stream_id, frame_tx)?;
+
+        Ok(stream)
+    }
+
+    pub async fn accept(&mut self) -> Result<Stream, Error> {
+        let stream_id = self
+            .stream_creation_rx
+            .recv()
+            .await
+            .ok_or(Error::SessionClosed)?;
+
+        let shutdown_rx = self.shutdown_tx.subscribe();
+        let close_tx = self.close_tx.clone();
+        let msg_tx = self.msg_tx.clone();
+        let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
+
+        let stream = Stream::new(stream_id, shutdown_rx, msg_tx, frame_rx, close_tx);
+        self.stream_manager.add_stream(stream_id, frame_tx)?;
+
+        Ok(stream)
+    }
+
+    pub fn close(self) {
+        self.shutdown_once.call_once(|| {
+            self.is_shutdown.store(true, Ordering::SeqCst);
+            let _ = self.shutdown_tx.send(());
+        });
     }
 }

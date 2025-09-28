@@ -1,6 +1,6 @@
 mod header;
 
-use crate::{consts::PROTOCOL_V0, error::Error};
+use crate::{StreamId, consts::PROTOCOL_V0, error::Error};
 use tokio_util::{
     bytes::{Buf, BufMut, BytesMut},
     codec::{Decoder, Encoder},
@@ -16,6 +16,13 @@ pub(crate) struct Frame {
 pub(crate) struct FrameCodec;
 
 impl Frame {
+    pub fn new_syn(stream_id: StreamId) -> Self {
+        Self {
+            header: Header::new(PROTOCOL_V0, Cmd::Syn, 0, stream_id),
+            data: vec![],
+        }
+    }
+
     pub fn frame_len(&self) -> usize {
         HEADER_LENGTH + self.header.data_length as usize
     }

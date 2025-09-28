@@ -1,7 +1,5 @@
 use thiserror::Error;
 
-use crate::frame::Frame;
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("invalid cmd: {0}")]
@@ -16,10 +14,14 @@ pub enum Error {
     DuplicateStream(u32),
     #[error("stream not found: {0}")]
     StreamNotFound(u32),
-    #[error("failed to send frame to stream: {0}")]
-    SendFrameFailed(#[from] tokio::sync::mpsc::error::SendError<Frame>),
     #[error("stream {0} not writable")]
     StreamNotWritable(u32),
     #[error("stream {0} not readable")]
     StreamNotReadable(u32),
+    #[error("failed to send frame to stream {0}")]
+    SendFrameFailed(u32),
+    #[error("session is closed")]
+    SessionClosed,
+    #[error("failed to send message to session")]
+    SendMessageFailed,
 }

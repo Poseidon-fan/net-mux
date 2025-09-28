@@ -3,20 +3,26 @@ use std::collections::HashMap;
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
 
-use crate::{StreamId, error::Error, frame::Frame};
+use crate::{
+    StreamId,
+    error::Error,
+    frame::{Cmd, Frame},
+};
 
 pub(crate) struct StreamManager {
     streams: Mutex<HashMap<StreamId, StreamHandle>>,
+    stream_creation_tx: mpsc::UnboundedSender<StreamId>,
 }
 
 pub(crate) struct StreamHandle {
-    pub frame_tx: mpsc::Sender<Frame>,
+    frame_tx: mpsc::Sender<Frame>,
 }
 
 impl StreamManager {
-    pub fn new() -> Self {
+    pub fn new(stream_creation_tx: mpsc::UnboundedSender<StreamId>) -> Self {
         Self {
             streams: Mutex::new(HashMap::new()),
+            stream_creation_tx,
         }
     }
 
@@ -47,15 +53,30 @@ impl StreamManager {
     }
 
     pub async fn dispatch_frame_to_stream(&self, frame: Frame) -> Result<(), Error> {
-        let frame_tx = self
-            .streams
-            .lock()
-            .get(&frame.header.stream_id)
-            .map(|s| s.frame_tx.clone());
-        if let Some(frame_tx) = frame_tx {
-            frame_tx.send(frame).await.map_err(Error::SendFrameFailed)
-        } else {
-            Err(Error::StreamNotFound(frame.header.stream_id))
+        let stream_id = frame.header.stream_id;
+        match frame.header.cmd {
+            Cmd::Syn => {
+                let _ = self.stream_creation_tx.send(stream_id);
+                Ok(())
+            }
+            Cmd::Fin => {
+                todo!()
+            }
+            Cmd::Psh => {
+                let frame_tx = self
+                    .streams
+                    .lock()
+                    .get(&stream_id)
+                    .map(|s| s.frame_tx.clone());
+                if let Some(frame_tx) = frame_tx {
+                    frame_tx
+                        .send(frame)
+                        .await
+                        .map_err(|_| Error::SendFrameFailed(stream_id))
+                } else {
+                    Err(Error::StreamNotFound(stream_id))
+                }
+            }
         }
     }
 }

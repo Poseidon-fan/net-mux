@@ -1,4 +1,4 @@
 pub struct Config {
-    pub send_window: usize,
-    pub recv_window: usize,
+    pub conn_send_window_size: usize,
+    pub stream_recv_window_size: usize,
 }
