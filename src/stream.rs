@@ -1,6 +1,14 @@
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 use bitflags::bitflags;
-use parking_lot::Mutex;
-use tokio::sync::{broadcast, mpsc};
+use parking_lot::RwLock;
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    sync::{broadcast, mpsc},
+};
 
 use crate::{StreamId, error::Error, frame::Frame, msg::Message};
 
@@ -8,7 +16,7 @@ pub struct Stream {
     stream_id: StreamId,
     shutdown_rx: broadcast::Receiver<()>,
 
-    status: Mutex<StreamFlags>,
+    status: RwLock<StreamFlags>,
 
     msg_tx: mpsc::Sender<Message>,
     frame_rx: mpsc::Receiver<Frame>,
@@ -40,7 +48,7 @@ impl Stream {
         Self {
             stream_id,
             shutdown_rx,
-            status: Mutex::new(StreamFlags::V),
+            status: RwLock::new(StreamFlags::V),
             msg_tx,
             frame_rx,
             close_tx,
@@ -48,7 +56,7 @@ impl Stream {
     }
 
     fn deny_rw(&self, flags: StreamFlags) {
-        let mut status_guard = self.status.lock();
+        let mut status_guard = self.status.write();
         *status_guard -= flags & StreamFlags::V;
 
         if !status_guard.contains(StreamFlags::V) {
@@ -63,5 +71,36 @@ impl Stream {
             .await
             .map_err(|_| Error::SendMessageFailed)?;
         res_rx.await.map_err(|_| Error::SendMessageFailed)?
+    }
+}
+
+impl AsyncRead for Stream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        todo!()
+    }
+}
+
+impl AsyncWrite for Stream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
+        todo!()
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+        todo!()
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        todo!()
     }
 }

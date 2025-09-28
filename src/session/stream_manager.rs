@@ -59,10 +59,7 @@ impl StreamManager {
                 let _ = self.stream_creation_tx.send(stream_id);
                 Ok(())
             }
-            Cmd::Fin => {
-                todo!()
-            }
-            Cmd::Psh => {
+            _ => {
                 let frame_tx = self
                     .streams
                     .lock()
