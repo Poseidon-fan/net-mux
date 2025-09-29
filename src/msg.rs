@@ -2,6 +2,7 @@ use tokio::sync::oneshot;
 
 use crate::{error::Error, frame::Frame};
 
+#[derive(Debug)]
 pub(crate) struct Message {
     pub frame: Frame,
     pub res_tx: oneshot::Sender<Result<usize, Error>>,

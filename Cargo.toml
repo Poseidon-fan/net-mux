@@ -26,3 +26,7 @@ futures-util = { version = "0.3.31", features = ["sink"] }
 tokio-util = { version = "0.7.16", features = ["codec"] }
 parking_lot = "0.12.4"
 bitflags = "2.9.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"

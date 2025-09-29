@@ -8,6 +8,7 @@ use tokio_util::{
 
 pub(crate) use header::*;
 
+#[derive(Debug)]
 pub(crate) struct Frame {
     pub header: Header,
     pub data: Vec<u8>,
@@ -20,6 +21,13 @@ impl Frame {
         Self {
             header: Header::new(PROTOCOL_V0, Cmd::Syn, 0, stream_id),
             data: vec![],
+        }
+    }
+
+    pub fn new_psh(stream_id: StreamId, data: &[u8]) -> Self {
+        Self {
+            header: Header::new(PROTOCOL_V0, Cmd::Psh, data.len() as u16, stream_id),
+            data: data.to_vec(),
         }
     }
 

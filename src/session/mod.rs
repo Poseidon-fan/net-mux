@@ -39,7 +39,7 @@ pub struct Session {
 }
 
 impl Session {
-    async fn new(
+    fn new(
         conn: impl AsyncRead + AsyncWrite + Send + Unpin + 'static,
         config: Config,
         mode: SessionMode,
@@ -84,6 +84,20 @@ impl Session {
         ));
 
         session
+    }
+
+    pub fn server(
+        conn: impl AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        config: Config,
+    ) -> Self {
+        Self::new(conn, config, SERVER_MODE)
+    }
+
+    pub fn client(
+        conn: impl AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        config: Config,
+    ) -> Self {
+        Self::new(conn, config, CLIENT_MODE)
     }
 
     pub async fn open(&self) -> Result<Stream, Error> {
