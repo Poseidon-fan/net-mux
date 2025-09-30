@@ -17,7 +17,7 @@ use crate::{StreamId, error::Error, frame::Frame, msg::Message};
 pub struct Stream {
     stream_id: StreamId,
     status: RwLock<StreamFlags>,
-    buf: Bytes,
+    read_buf: Bytes,
 
     shutdown_rx: broadcast::Receiver<()>,
 
@@ -51,7 +51,7 @@ impl Stream {
         Self {
             stream_id,
             status: RwLock::new(StreamFlags::V),
-            buf: Bytes::new(),
+            read_buf: Bytes::new(),
             shutdown_rx,
             msg_tx,
             frame_rx,
@@ -93,16 +93,16 @@ impl AsyncRead for Stream {
                 )));
             }
 
-            if !this.buf.is_empty() {
-                let to_copy = cmp::min(this.buf.len(), buf.remaining());
-                buf.put_slice(&this.buf[..to_copy]);
-                this.buf.advance(to_copy);
+            if !this.read_buf.is_empty() {
+                let to_copy = cmp::min(this.read_buf.len(), buf.remaining());
+                buf.put_slice(&this.read_buf[..to_copy]);
+                this.read_buf.advance(to_copy);
                 return Poll::Ready(Ok(()));
             }
 
             match Pin::new(&mut this.frame_rx).poll_recv(cx) {
                 Poll::Ready(Some(frame)) => {
-                    this.buf = Bytes::from(frame.data);
+                    this.read_buf = Bytes::from(frame.data);
                     continue;
                 }
                 Poll::Pending => {
