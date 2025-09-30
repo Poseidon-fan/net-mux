@@ -1,8 +1,6 @@
 use net_mux::{Config, Session};
-use std::time::Duration;
-use tokio::io::{self, AsyncWriteExt};
+use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::time;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -13,20 +11,22 @@ async fn main() -> anyhow::Result<()> {
     let session = Session::client(conn, Config::default());
     println!("session starting");
 
-    let mut interval = time::interval(Duration::from_secs(2));
-    interval.tick().await;
-    let mut counter = 0;
-
     loop {
-        interval.tick().await;
-        counter += 1;
-        let message = format!("Hello, server! This is message #{}", counter);
-
         let stream = session.open().await?;
+        let (read_half, mut write_half) = io::split(stream);
 
-        let (_, mut writer) = io::split(stream);
-        writer
-            .write_all(format!("{}\n", message).as_bytes())
-            .await?;
+        let mut reader = BufReader::new(read_half);
+        let mut stdin = io::BufReader::new(io::stdin());
+
+        let mut line_to_send = String::new();
+        let mut server_response = String::new();
+
+        let _ = stdin.read_line(&mut line_to_send).await?;
+        write_half.write_all(line_to_send.as_bytes()).await?;
+        line_to_send.clear();
+
+        let _ = reader.read_line(&mut server_response).await?;
+        println!("Server response: {}", server_response);
+        server_response.clear();
     }
 }
