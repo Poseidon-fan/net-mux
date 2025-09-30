@@ -1,6 +1,7 @@
 use std::{
     cmp,
-    pin::{Pin, pin},
+    future::Future,
+    pin::Pin,
     task::{Context, Poll},
 };
 
@@ -14,10 +15,13 @@ use tokio_util::bytes::{Buf, Bytes};
 
 use crate::{StreamId, error::Error, frame::Frame, msg::Message};
 
+type WriteFrameFuture = Pin<Box<dyn Future<Output = Result<usize, Error>> + Send>>;
+
 pub struct Stream {
     stream_id: StreamId,
     status: RwLock<StreamFlags>,
     read_buf: Bytes,
+    cur_write_fut: Option<WriteFrameFuture>,
 
     shutdown_rx: broadcast::Receiver<()>,
 
@@ -52,6 +56,7 @@ impl Stream {
             stream_id,
             status: RwLock::new(StreamFlags::V),
             read_buf: Bytes::new(),
+            cur_write_fut: None,
             shutdown_rx,
             msg_tx,
             frame_rx,
@@ -122,19 +127,42 @@ impl AsyncWrite for Stream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
-        if !self.status.read().contains(StreamFlags::W) {
+        let this = self.get_mut();
+        if !this.status.read().contains(StreamFlags::W) {
             return Poll::Ready(Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
                 "stream is closed for writing",
             )));
         }
 
-        let frame = Frame::new_psh(self.stream_id, buf);
-        let fut = pin!(self.send_frame(frame));
-        match fut.poll(cx) {
-            Poll::Ready(Ok(n)) => Poll::Ready(Ok(n)),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
-            Poll::Pending => Poll::Pending,
+        let mut fut = match this.cur_write_fut.take() {
+            Some(fut) => fut,
+            None => {
+                let frame = Frame::new_psh(this.stream_id, buf);
+                let msg_tx = this.msg_tx.clone();
+                Box::pin(async move {
+                    let (msg, res_rx) = Message::new(frame);
+                    msg_tx
+                        .send(msg)
+                        .await
+                        .map_err(|_| Error::SendMessageFailed)?;
+                    res_rx.await.map_err(|_| Error::SendMessageFailed)?
+                }) as WriteFrameFuture
+            }
+        };
+
+        match fut.as_mut().poll(cx) {
+            Poll::Ready(res) => {
+                this.cur_write_fut = None;
+                match res {
+                    Ok(_) => Poll::Ready(Ok(buf.len())),
+                    Err(e) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
+                }
+            }
+            Poll::Pending => {
+                this.cur_write_fut = Some(fut);
+                Poll::Pending
+            }
         }
     }
 

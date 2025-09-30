@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use net_mux::{Config, Session};
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -20,14 +20,13 @@ async fn main() -> Result<()> {
         let (mut reader, mut writer) = io::split(stream);
         let mut buf = [0u8; 1024];
 
-        loop {
-            let n = reader.read(&mut buf).await?;
-            if n == 0 {
-                println!("remote closed");
-                break;
-            }
-            println!("Received: {:?}", String::from_utf8_lossy(&buf[..n]));
-            writer.write_all(&buf[..n]).await?;
+        let n = reader.read(&mut buf).await?;
+        if n == 0 {
+            println!("remote closed");
+            break;
         }
+        println!("Received: {:?}", String::from_utf8_lossy(&buf[..n]));
+        writer.write_all(&buf[..n]).await?;
     }
+    Ok(())
 }
