@@ -9,7 +9,7 @@ use std::sync::{
 use parking_lot::Once;
 use tokio::{
     io::{self, AsyncRead, AsyncWrite},
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, oneshot},
 };
 
 use crate::{
@@ -108,10 +108,19 @@ impl Session {
         let msg_tx = self.msg_tx.clone();
         let stream_id = self.stream_id_allocator.allocate();
         let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
+        let (remote_fin_tx, remote_fin_rx) = oneshot::channel();
 
-        let stream = Stream::new(stream_id, shutdown_rx, msg_tx.clone(), frame_rx, close_tx);
+        let stream = Stream::new(
+            stream_id,
+            shutdown_rx,
+            msg_tx.clone(),
+            frame_rx,
+            close_tx,
+            remote_fin_rx,
+        );
         msg::send_syn(msg_tx, stream_id).await?;
-        self.stream_manager.add_stream(stream_id, frame_tx)?;
+        self.stream_manager
+            .add_stream(stream_id, frame_tx, remote_fin_tx)?;
 
         Ok(stream)
     }
@@ -127,9 +136,18 @@ impl Session {
         let close_tx = self.close_tx.clone();
         let msg_tx = self.msg_tx.clone();
         let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
+        let (remote_fin_tx, remote_fin_rx) = oneshot::channel();
 
-        let stream = Stream::new(stream_id, shutdown_rx, msg_tx, frame_rx, close_tx);
-        self.stream_manager.add_stream(stream_id, frame_tx)?;
+        let stream = Stream::new(
+            stream_id,
+            shutdown_rx,
+            msg_tx,
+            frame_rx,
+            close_tx,
+            remote_fin_rx,
+        );
+        self.stream_manager
+            .add_stream(stream_id, frame_tx, remote_fin_tx)?;
 
         Ok(stream)
     }

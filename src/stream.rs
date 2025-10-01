@@ -9,7 +9,7 @@ use bitflags::bitflags;
 use parking_lot::RwLock;
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, oneshot},
 };
 use tokio_util::bytes::{Buf, Bytes};
 
@@ -32,7 +32,6 @@ pub struct Stream {
 
     msg_tx: mpsc::Sender<Message>,
     frame_rx: mpsc::Receiver<Frame>,
-
     close_tx: mpsc::UnboundedSender<StreamId>,
 }
 
@@ -45,8 +44,13 @@ bitflags! {
     }
 }
 
+struct StreamPtrWrapper(*mut Stream);
+
+unsafe impl Send for StreamPtrWrapper {}
+
 impl Stream {
-    pub fn close(&self) {
+    pub async fn close(&self) {
+        let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id).await;
         self.deny_rw(StreamFlags::W);
     }
 
@@ -56,8 +60,9 @@ impl Stream {
         msg_tx: mpsc::Sender<Message>,
         frame_rx: mpsc::Receiver<Frame>,
         close_tx: mpsc::UnboundedSender<StreamId>,
+        remote_fin_rx: oneshot::Receiver<()>,
     ) -> Self {
-        Self {
+        let stream = Self {
             stream_id,
             status: RwLock::new(StreamFlags::V),
             read_buf: Bytes::new(),
@@ -66,7 +71,12 @@ impl Stream {
             msg_tx,
             frame_rx,
             close_tx,
-        }
+        };
+        tokio::spawn(listen_fin(
+            remote_fin_rx,
+            StreamPtrWrapper(&stream as *const Stream as *mut Stream),
+        ));
+        stream
     }
 
     fn deny_rw(&self, flags: StreamFlags) {
@@ -165,7 +175,16 @@ impl AsyncWrite for Stream {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        self.deny_rw(StreamFlags::W);
         Poll::Ready(Ok(()))
+    }
+}
+
+async fn listen_fin(remote_fin_rx: oneshot::Receiver<()>, stream_wrapper: StreamPtrWrapper) {
+    if (remote_fin_rx.await).is_ok() {
+        unsafe {
+            if let Some(stream) = stream_wrapper.0.as_mut() {
+                stream.deny_rw(StreamFlags::W);
+            }
+        }
     }
 }

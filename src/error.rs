@@ -7,7 +7,7 @@ pub enum Error {
     #[error("invalid version: {0}")]
     InvalidVersion(u8),
     #[error("io error: {0}")]
-    Tmp(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("data length too large (>{})", u16::MAX)]
     DataLengthTooLarge,
     #[error("duplicate stream id {0}")]
@@ -24,4 +24,6 @@ pub enum Error {
     SessionClosed,
     #[error("failed to send message to session")]
     SendMessageFailed,
+    #[error("internal error: {0}")]
+    Internal(String),
 }

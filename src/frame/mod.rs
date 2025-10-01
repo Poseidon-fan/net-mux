@@ -31,6 +31,13 @@ impl Frame {
         }
     }
 
+    pub fn new_fin(stream_id: StreamId) -> Self {
+        Self {
+            header: Header::new(PROTOCOL_V0, Cmd::Fin, 0, stream_id),
+            data: vec![],
+        }
+    }
+
     pub fn frame_len(&self) -> usize {
         HEADER_LENGTH + self.header.data_length as usize
     }

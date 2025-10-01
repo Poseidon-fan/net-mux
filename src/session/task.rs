@@ -18,6 +18,7 @@ pub(crate) async fn start_msg_collect_loop(
     loop {
         select! {
             msg = msg_rx.recv() => {
+                println!("Send msg: {:?}", msg);
                 match msg {
                     Some(msg) => {
                         let bytes_written = msg.frame.frame_len();
@@ -47,6 +48,7 @@ pub(crate) async fn start_frame_dispatch_loop(
     loop {
         select! {
             frame = frame_reader.next() => {
+                println!("Receive frame: {:?}", frame);
                 match frame {
                     Some(Ok(frame)) => {
                         // TODO(Poseidon): handle error

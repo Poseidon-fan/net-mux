@@ -38,3 +38,10 @@ pub(crate) async fn send_psh(
 ) -> Result<usize, Error> {
     send_frame(msg_tx, Frame::new_psh(stream_id, data)).await
 }
+
+pub(crate) async fn send_fin(
+    msg_tx: mpsc::Sender<Message>,
+    stream_id: StreamId,
+) -> Result<usize, Error> {
+    send_frame(msg_tx, Frame::new_fin(stream_id)).await
+}
