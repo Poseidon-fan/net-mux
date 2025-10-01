@@ -1,17 +1,22 @@
 use anyhow::{Ok, Result};
 use net_mux::{Config, Session};
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:7777").await?;
     println!("Server listening on 127.0.0.1:7777");
 
-    let (conn, addr) = listener.accept().await?;
-    conn.set_nodelay(true)?;
-    println!("New client: {:?}", addr);
+    loop {
+        let (conn, addr) = listener.accept().await?;
+        conn.set_nodelay(true)?;
+        println!("New client: {:?}", addr);
+        tokio::spawn(handle_conn(conn));
+    }
+}
 
+async fn handle_conn(conn: TcpStream) -> Result<()> {
     let mut session = Session::server(conn, Config::default());
     println!("session starting");
 
