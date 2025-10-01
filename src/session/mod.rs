@@ -1,6 +1,7 @@
 mod stream_manager;
 mod task;
 
+use std::marker::PhantomData;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -21,7 +22,7 @@ use crate::{
     session::stream_manager::StreamManager,
 };
 
-pub struct Session {
+pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     config: Config,
     stream_id_allocator: StreamIdAllocator,
     stream_manager: Arc<StreamManager>,
@@ -35,14 +36,12 @@ pub struct Session {
     // contains here to copy to new Stream
     msg_tx: mpsc::Sender<Message>,
     close_tx: mpsc::UnboundedSender<StreamId>,
+
+    _phantom: PhantomData<T>,
 }
 
-impl Session {
-    fn new(
-        conn: impl AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        config: Config,
-        mode: SessionMode,
-    ) -> Self {
+impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
+    fn new(conn: T, config: Config, mode: SessionMode) -> Self {
         let (conn_reader, conn_writer) = io::split(conn);
         let (msg_tx, msg_rx) = mpsc::channel(config.conn_send_window_size);
         let (close_tx, close_rx) = mpsc::unbounded_channel();
@@ -64,6 +63,7 @@ impl Session {
             is_shutdown: AtomicBool::new(false),
             msg_tx,
             close_tx,
+            _phantom: PhantomData,
         };
 
         tokio::spawn(task::start_msg_collect_loop(
@@ -85,17 +85,11 @@ impl Session {
         session
     }
 
-    pub fn server(
-        conn: impl AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        config: Config,
-    ) -> Self {
+    pub fn server(conn: T, config: Config) -> Self {
         Self::new(conn, config, SERVER_MODE)
     }
 
-    pub fn client(
-        conn: impl AsyncRead + AsyncWrite + Send + Unpin + 'static,
-        config: Config,
-    ) -> Self {
+    pub fn client(conn: T, config: Config) -> Self {
         Self::new(conn, config, CLIENT_MODE)
     }
 
