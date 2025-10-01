@@ -1,6 +1,6 @@
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
-use crate::{error::Error, frame::Frame};
+use crate::{StreamId, error::Error, frame::Frame};
 
 #[derive(Debug)]
 pub(crate) struct Message {
@@ -13,4 +13,28 @@ impl Message {
         let (res_tx, res_rx) = oneshot::channel();
         (Self { frame, res_tx }, res_rx)
     }
+}
+
+async fn send_frame(msg_tx: mpsc::Sender<Message>, frame: Frame) -> Result<usize, Error> {
+    let (msg, res_rx) = Message::new(frame);
+    msg_tx
+        .send(msg)
+        .await
+        .map_err(|_| Error::SendMessageFailed)?;
+    res_rx.await.map_err(|_| Error::SendMessageFailed)?
+}
+
+pub(crate) async fn send_syn(
+    msg_tx: mpsc::Sender<Message>,
+    stream_id: StreamId,
+) -> Result<usize, Error> {
+    send_frame(msg_tx, Frame::new_syn(stream_id)).await
+}
+
+pub(crate) async fn send_psh(
+    msg_tx: mpsc::Sender<Message>,
+    stream_id: StreamId,
+    data: &[u8],
+) -> Result<usize, Error> {
+    send_frame(msg_tx, Frame::new_psh(stream_id, data)).await
 }

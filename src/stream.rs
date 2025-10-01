@@ -13,7 +13,12 @@ use tokio::{
 };
 use tokio_util::bytes::{Buf, Bytes};
 
-use crate::{StreamId, error::Error, frame::Frame, msg::Message};
+use crate::{
+    StreamId,
+    error::Error,
+    frame::Frame,
+    msg::{self, Message},
+};
 
 type WriteFrameFuture = Pin<Box<dyn Future<Output = Result<usize, Error>> + Send>>;
 
@@ -72,15 +77,6 @@ impl Stream {
             let _ = self.close_tx.send(self.stream_id);
         }
     }
-
-    pub(crate) async fn send_frame(&self, frame: Frame) -> Result<usize, Error> {
-        let (msg, res_rx) = Message::new(frame);
-        self.msg_tx
-            .send(msg)
-            .await
-            .map_err(|_| Error::SendMessageFailed)?;
-        res_rx.await.map_err(|_| Error::SendMessageFailed)?
-    }
 }
 
 impl AsyncRead for Stream {
@@ -138,16 +134,11 @@ impl AsyncWrite for Stream {
         let mut fut = match this.cur_write_fut.take() {
             Some(fut) => fut,
             None => {
-                let frame = Frame::new_psh(this.stream_id, buf);
                 let msg_tx = this.msg_tx.clone();
-                Box::pin(async move {
-                    let (msg, res_rx) = Message::new(frame);
-                    msg_tx
-                        .send(msg)
-                        .await
-                        .map_err(|_| Error::SendMessageFailed)?;
-                    res_rx.await.map_err(|_| Error::SendMessageFailed)?
-                }) as WriteFrameFuture
+                let stream_id = this.stream_id;
+                let data = buf.to_vec();
+                Box::pin(async move { msg::send_psh(msg_tx, stream_id, &data).await })
+                    as WriteFrameFuture
             }
         };
 

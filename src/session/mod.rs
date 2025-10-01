@@ -17,8 +17,7 @@ use crate::{
     alloc::{EVEN_START_STREAM_ID, ODD_START_STREAM_ID, StreamIdAllocator},
     consts::{CLIENT_MODE, SERVER_MODE, SessionMode},
     error::Error,
-    frame::Frame,
-    msg::Message,
+    msg::{self, Message},
     session::stream_manager::StreamManager,
 };
 
@@ -110,8 +109,8 @@ impl Session {
         let stream_id = self.stream_id_allocator.allocate();
         let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
 
-        let stream = Stream::new(stream_id, shutdown_rx, msg_tx, frame_rx, close_tx);
-        stream.send_frame(Frame::new_syn(stream_id)).await?;
+        let stream = Stream::new(stream_id, shutdown_rx, msg_tx.clone(), frame_rx, close_tx);
+        msg::send_syn(msg_tx, stream_id).await?;
         self.stream_manager.add_stream(stream_id, frame_tx)?;
 
         Ok(stream)
