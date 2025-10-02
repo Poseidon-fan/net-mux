@@ -6,7 +6,6 @@ on:
 
 jobs:
   Publish:
-    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     container:
       image: rust:latest
