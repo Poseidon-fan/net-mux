@@ -1,3 +1,29 @@
+//! Session module provides session management functionality for network multiplexing
+//!
+//! A `Session` allows you to create multiple independent streams over a single underlying
+//! connection, enabling efficient multiplexing of network traffic. Each stream has its
+//! own unique ID and can be used for bidirectional data transmission.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use net_mux::{Session, Config};
+//! use tokio::net::TcpStream;
+//!
+//! #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a client session
+//! let tcp_stream = TcpStream::connect("127.0.0.1:8080").await?;
+//! let config = Config::default();
+//! let session = Session::client(tcp_stream, config);
+//!
+//! // Open a new stream
+//! let stream = session.open().await?;
+//! // Use the stream for data transmission...
+//! # Ok(())
+//! # }
+//! ```
+
 mod stream_manager;
 mod task;
 
@@ -22,6 +48,11 @@ use crate::{
     session::stream_manager::StreamManager,
 };
 
+/// Network multiplexing session
+///
+/// `Session` is the core component of network multiplexing, managing multiple independent streams
+/// over a single underlying connection. Each session can handle multiple streams simultaneously,
+/// with each stream having its own unique stream ID and lifecycle.
 pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     config: Config,
     stream_id_allocator: StreamIdAllocator,
@@ -85,14 +116,21 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         session
     }
 
+    /// Create a server session.
     pub fn server(conn: T, config: Config) -> Self {
         Self::new(conn, config, SERVER_MODE)
     }
 
+    /// Create a client session.
     pub fn client(conn: T, config: Config) -> Self {
         Self::new(conn, config, CLIENT_MODE)
     }
 
+    /// Open a new stream
+    ///
+    /// This method allocates a new stream ID, creates the corresponding stream object,
+    /// and sends a SYN frame to establish the connection.
+    /// The returned stream can be used for data transmission.
     pub async fn open(&self) -> Result<Stream, Error> {
         if self.is_shutdown.load(Ordering::SeqCst) {
             return Err(Error::SessionClosed);
@@ -119,6 +157,11 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         Ok(stream)
     }
 
+    /// Accept a new stream connection
+    ///
+    /// This method waits for stream creation requests from the remote end,
+    /// then creates the corresponding stream object.
+    /// Typically used by servers to accept connection requests from clients.
     pub async fn accept(&mut self) -> Result<Stream, Error> {
         let stream_id = self
             .stream_creation_rx
@@ -146,6 +189,14 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         Ok(stream)
     }
 
+    /// Close the session
+    ///
+    /// This method gracefully closes the session, including:
+    /// - Setting the shutdown flag
+    /// - Notifying all background tasks to stop
+    /// - Closing the underlying connection
+    ///
+    /// Note: After calling this method, the session can no longer be used to send data.
     pub fn close(self) {
         self.shutdown_once.call_once(|| {
             self.is_shutdown.store(true, Ordering::SeqCst);

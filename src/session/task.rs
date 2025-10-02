@@ -9,6 +9,8 @@ use tokio::{
 };
 use tokio_util::codec::{FramedRead, FramedWrite};
 
+// Collects the `Message` from `Stream`s,
+// send the inner `Frame` out and write back the result `Stream`.
 pub(crate) async fn start_msg_collect_loop(
     mut msg_rx: mpsc::Receiver<Message>,
     mut conn_writer: impl AsyncWrite + Unpin,
@@ -38,6 +40,7 @@ pub(crate) async fn start_msg_collect_loop(
     }
 }
 
+// Dispatches the `Frame` to `Streams` by `StreamManager`.
 pub(crate) async fn start_frame_dispatch_loop(
     mut conn_reader: impl AsyncRead + Unpin,
     stream_manager: Arc<StreamManager>,
@@ -68,6 +71,8 @@ pub(crate) async fn start_frame_dispatch_loop(
     }
 }
 
+// Listens the `Stream`s to be closed,
+// and remove the `Stream` from `StreamManager`
 pub(crate) async fn start_stream_close_listen(
     mut close_rx: mpsc::UnboundedReceiver<StreamId>,
     stream_manager: Arc<StreamManager>,

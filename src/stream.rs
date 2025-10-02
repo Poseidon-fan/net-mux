@@ -1,3 +1,16 @@
+//! Stream abstraction for multiplexing
+//!
+//! This module provides the [`Stream`] struct for representing individual data streams
+//! in network multiplexing. Each stream has a unique stream ID and implements async
+//! read/write interfaces, supporting concurrent processing of multiple streams.
+//!
+//! # Features
+//!
+//! - **Async I/O**: Implements [`AsyncRead`] and [`AsyncWrite`] traits
+//! - **State Management**: Uses bit flags to track stream read/write state
+//! - **Auto Cleanup**: Automatically notifies stream manager when stream closes
+//! - **Thread Safety**: Supports safe cross-thread transfer
+
 use std::{
     cmp,
     future::Future,
@@ -20,8 +33,14 @@ use crate::{
     msg::{self, Message},
 };
 
+// Async Future type for writing frames
 type WriteFrameFuture = Pin<Box<dyn Future<Output = Result<usize, Error>> + Send>>;
 
+/// Multiplexed stream
+///
+/// Represents a data stream in network multiplexing, supporting async read/write operations.
+/// Each stream has a unique stream ID and communicates with the stream manager through
+/// message channels.
 pub struct Stream {
     stream_id: StreamId,
     status: RwLock<StreamFlags>,
@@ -36,24 +55,37 @@ pub struct Stream {
 }
 
 bitflags! {
+    // Stream state flags
+    //
+    // Used to track stream read/write state, supporting half-close operations.
     struct StreamFlags: u8 {
+        // Read permission flag
         const R = 1 << 0;
+        // Write permission flag
         const W = 1 << 1;
 
+        // Read/Write permission flags (R | W)
         const V = Self::R.bits() | Self::W.bits();
     }
 }
 
+// Wrapper for raw stream pointer to enable Send trait
 struct StreamPtrWrapper(*mut Stream);
 
 unsafe impl Send for StreamPtrWrapper {}
 
 impl Stream {
+    /// Close the stream
+    ///
+    /// Sends a FIN message to the remote peer and disables write operations.
+    /// The stream will be automatically cleaned up when both read and write
+    /// operations are disabled.
     pub async fn close(&self) {
         let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id).await;
         self.deny_rw(StreamFlags::W);
     }
 
+    // Create a new stream and listen remote fin signal.
     pub(crate) fn new(
         stream_id: StreamId,
         shutdown_rx: broadcast::Receiver<()>,
@@ -79,6 +111,11 @@ impl Stream {
         stream
     }
 
+    // Deny read/write permissions for the stream
+    //
+    // Removes the specified flags from the stream's status. If all permissions
+    // are removed (both read and write), the stream will be automatically
+    // closed and cleaned up.
     fn deny_rw(&self, flags: StreamFlags) {
         let mut status_guard = self.status.write();
         *status_guard -= flags & StreamFlags::V;
@@ -179,6 +216,10 @@ impl AsyncWrite for Stream {
     }
 }
 
+// Listen for remote FIN signal and handle stream closure
+//
+// This function runs in a separate background task and waits for the remote peer to send
+// a FIN signal. When received, it disables write operations on the stream.
 async fn listen_fin(remote_fin_rx: oneshot::Receiver<()>, stream_wrapper: StreamPtrWrapper) {
     if (remote_fin_rx.await).is_ok() {
         unsafe {

@@ -9,6 +9,7 @@ use crate::{
     frame::{Cmd, Frame},
 };
 
+// Internal stream manager that maintains active stream registry channel
 pub(crate) struct StreamManager {
     streams: Mutex<HashMap<StreamId, StreamHandle>>,
     stream_creation_tx: mpsc::UnboundedSender<StreamId>,
