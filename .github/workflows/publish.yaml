@@ -3,11 +3,10 @@ on:
   push:
     tags:
       - v[0-9]+.[0-9]+.[0-9]+
-    branches:
-      - master
 
 jobs:
   Publish:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     container:
       image: rust:latest
