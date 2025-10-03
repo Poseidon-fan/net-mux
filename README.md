@@ -1,18 +1,5 @@
 <h1 align="center">net-mux</h1>
 
-<div align="center">
-A simple Network Connection Stream Multiplexing async library for rust
-</div>
-
-<br>
-<div align="center">
-    <a href="https://github.com/Poseidon-fan/net-mux/tree/master/examples">Examples</a>
-    |
-    <a href="https://docs.rs/crate/net-mux/">Released API Docs</a>
-</div>
-
-<div align="center">
-
 [![GitHub][github-badge]][github-url]
 [![Crates.io][crates-badge]][crates-url]
 [![MIT licensed][mit-badge]][mit-url]
