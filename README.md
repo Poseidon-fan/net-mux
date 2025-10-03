@@ -1,5 +1,7 @@
 <h1 align="center">net-mux</h1>
 
+<div align="center">
+
 [![GitHub][github-badge]][github-url]
 [![Crates.io][crates-badge]][crates-url]
 [![MIT licensed][mit-badge]][mit-url]
