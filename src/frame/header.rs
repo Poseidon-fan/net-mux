@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{StreamId, consts::Version, error::Error};
+use crate::{alloc::StreamId, consts::Version, error::Error};
 
 // Frame header structure for the net-mux protocol.
 //

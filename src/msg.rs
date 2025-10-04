@@ -1,6 +1,6 @@
 use tokio::sync::{mpsc, oneshot};
 
-use crate::{StreamId, error::Error, frame::Frame};
+use crate::{alloc::StreamId, error::Error, frame::Frame};
 
 // Internal message structure for net-mux protocol communication.
 //

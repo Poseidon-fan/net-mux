@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use crate::{StreamId, frame::FrameCodec, msg::Message, session::stream_manager::StreamManager};
+use crate::{
+    alloc::StreamId, frame::FrameCodec, msg::Message, session::stream_manager::StreamManager,
+};
 use futures_util::{SinkExt, StreamExt};
 use tokio::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},

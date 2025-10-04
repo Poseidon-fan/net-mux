@@ -27,14 +27,14 @@ use tokio::{
 use tokio_util::bytes::{Buf, Bytes};
 
 use crate::{
-    StreamId,
+    alloc::StreamId,
     error::Error,
     frame::Frame,
     msg::{self, Message},
 };
 
 // Async Future type for writing frames
-type WriteFrameFuture = Pin<Box<dyn Future<Output = Result<usize, Error>> + Send>>;
+type WriteFrameFuture = Pin<Box<dyn Future<Output = Result<usize, Error>> + Send + Sync>>;
 
 /// Multiplexed stream
 ///

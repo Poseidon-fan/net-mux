@@ -40,8 +40,8 @@ use tokio::{
 };
 
 use crate::{
-    Config, Stream, StreamId,
-    alloc::{EVEN_START_STREAM_ID, ODD_START_STREAM_ID, StreamIdAllocator},
+    Config, Stream,
+    alloc::{EVEN_START_STREAM_ID, ODD_START_STREAM_ID, StreamId, StreamIdAllocator},
     consts::{CLIENT_MODE, SERVER_MODE, SessionMode},
     error::Error,
     msg::{self, Message},

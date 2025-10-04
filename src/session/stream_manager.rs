@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    StreamId,
+    alloc::StreamId,
     error::Error,
     frame::{Cmd, Frame},
 };

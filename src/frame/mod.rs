@@ -1,6 +1,6 @@
 mod header;
 
-use crate::{StreamId, consts::PROTOCOL_V0, error::Error};
+use crate::{alloc::StreamId, consts::PROTOCOL_V0, error::Error};
 use tokio_util::{
     bytes::{Buf, BufMut, BytesMut},
     codec::{Decoder, Encoder},
