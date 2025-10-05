@@ -58,7 +58,7 @@ pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     stream_id_allocator: StreamIdAllocator,
     stream_manager: Arc<StreamManager>,
 
-    stream_creation_rx: mpsc::UnboundedReceiver<StreamId>,
+    stream_creation_rx: tokio::sync::Mutex<mpsc::UnboundedReceiver<StreamId>>,
 
     shutdown_tx: broadcast::Sender<()>,
     shutdown_once: Once,
@@ -88,7 +88,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
                 CLIENT_MODE => EVEN_START_STREAM_ID,
             }),
             stream_manager: Arc::new(StreamManager::new(stream_creation_tx)),
-            stream_creation_rx,
+            stream_creation_rx: tokio::sync::Mutex::new(stream_creation_rx),
             shutdown_tx,
             shutdown_once: Once::new(),
             is_shutdown: AtomicBool::new(false),
@@ -162,9 +162,11 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
     /// This method waits for stream creation requests from the remote end,
     /// then creates the corresponding stream object.
     /// Typically used by servers to accept connection requests from clients.
-    pub async fn accept(&mut self) -> Result<Stream, Error> {
+    pub async fn accept(&self) -> Result<Stream, Error> {
         let stream_id = self
             .stream_creation_rx
+            .lock()
+            .await
             .recv()
             .await
             .ok_or(Error::SessionClosed)?;
