@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
 }
 
 async fn handle_conn(conn: TcpStream) -> Result<()> {
-    let mut session = Session::server(conn, Config::default());
+    let session = Session::server(conn, Config::default());
     println!("session starting");
 
     loop {
