@@ -32,6 +32,7 @@ async fn handle_conn(conn: TcpStream) -> Result<()> {
         }
         println!("Received: {:?}", String::from_utf8_lossy(&buf[..n]));
         writer.write_all(&buf[..n]).await?;
+        writer.flush().await?;
     }
     Ok(())
 }

@@ -166,46 +166,61 @@ impl AsyncRead for Stream {
 
 impl AsyncWrite for Stream {
     fn poll_write(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
-        let this = self.get_mut();
-        if !this.status.read().contains(StreamFlags::W) {
+        if !self.status.read().contains(StreamFlags::W) {
             return Poll::Ready(Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
                 "stream is closed for writing",
             )));
         }
 
-        let mut fut = match this.cur_write_fut.take() {
-            Some(fut) => fut,
-            None => {
-                let msg_tx = this.msg_tx.clone();
-                let stream_id = this.stream_id;
-                let data = buf.to_vec();
-                Box::pin(async move { msg::send_psh(msg_tx, stream_id, &data).await })
-                    as WriteFrameFuture
-            }
-        };
+        if self.cur_write_fut.is_none() {
+            let msg_tx = self.msg_tx.clone();
+            let stream_id = self.stream_id;
+            let data = buf.to_vec();
 
-        match fut.as_mut().poll(cx) {
-            Poll::Ready(res) => {
-                this.cur_write_fut = None;
-                match res {
-                    Ok(_) => Poll::Ready(Ok(buf.len())),
-                    Err(e) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
-                }
+            self.cur_write_fut =
+                Some(
+                    Box::pin(async move { msg::send_psh(msg_tx, stream_id, &data).await })
+                        as WriteFrameFuture,
+                );
+            return Poll::Ready(Ok(buf.len()));
+        }
+
+        match self.cur_write_fut.as_mut().unwrap().as_mut().poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(_)) => {
+                let msg_tx = self.msg_tx.clone();
+                let stream_id = self.stream_id;
+                let data = buf.to_vec();
+
+                self.cur_write_fut =
+                    Some(
+                        Box::pin(async move { msg::send_psh(msg_tx, stream_id, &data).await })
+                            as WriteFrameFuture,
+                    );
+                Poll::Ready(Ok(buf.len()))
             }
-            Poll::Pending => {
-                this.cur_write_fut = Some(fut);
-                Poll::Pending
-            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
-        Poll::Ready(Ok(()))
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        if let Some(fut) = self.cur_write_fut.as_mut() {
+            match fut.as_mut().poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),
+                Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
+            }
+        } else {
+            Poll::Ready(Ok(()))
+        }
     }
 
     fn poll_shutdown(

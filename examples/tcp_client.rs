@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
         let _ = stdin.read_line(&mut line_to_send).await?;
         write_half.write_all(line_to_send.as_bytes()).await?;
+        write_half.flush().await?;
         line_to_send.clear();
 
         let _ = reader.read_line(&mut server_response).await?;
