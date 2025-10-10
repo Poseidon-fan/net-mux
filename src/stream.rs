@@ -47,10 +47,11 @@ pub struct Stream {
     read_buf: Bytes,
     cur_write_fut: Option<WriteFrameFuture>,
 
-    shutdown_rx: broadcast::Receiver<()>,
+    _shutdown_rx: broadcast::Receiver<()>,
 
     msg_tx: mpsc::Sender<Message>,
     frame_rx: mpsc::Receiver<Frame>,
+    remote_fin_rx: oneshot::Receiver<()>,
     close_tx: mpsc::UnboundedSender<StreamId>,
 }
 
@@ -68,11 +69,6 @@ bitflags! {
         const V = Self::R.bits() | Self::W.bits();
     }
 }
-
-// Wrapper for raw stream pointer to enable Send trait
-struct StreamPtrWrapper(*mut Stream);
-
-unsafe impl Send for StreamPtrWrapper {}
 
 impl Stream {
     /// Close the stream
@@ -94,21 +90,17 @@ impl Stream {
         close_tx: mpsc::UnboundedSender<StreamId>,
         remote_fin_rx: oneshot::Receiver<()>,
     ) -> Self {
-        let stream = Self {
+        Self {
             stream_id,
             status: RwLock::new(StreamFlags::V),
             read_buf: Bytes::new(),
             cur_write_fut: None,
-            shutdown_rx,
+            _shutdown_rx: shutdown_rx,
             msg_tx,
             frame_rx,
             close_tx,
-        };
-        tokio::spawn(listen_fin(
             remote_fin_rx,
-            StreamPtrWrapper(&stream as *const Stream as *mut Stream),
-        ));
-        stream
+        }
     }
 
     // Deny read/write permissions for the stream
@@ -123,6 +115,17 @@ impl Stream {
         if !status_guard.contains(StreamFlags::V) {
             let _ = self.close_tx.send(self.stream_id);
         }
+    }
+}
+
+impl Drop for Stream {
+    fn drop(&mut self) {
+        self.deny_rw(StreamFlags::V);
+        let msg_tx = self.msg_tx.clone();
+        let stream_id = self.stream_id;
+        tokio::spawn(async move {
+            let _ = msg::send_fin(msg_tx, stream_id).await;
+        });
     }
 }
 
@@ -146,6 +149,14 @@ impl AsyncRead for Stream {
                 buf.put_slice(&this.read_buf[..to_copy]);
                 this.read_buf.advance(to_copy);
                 return Poll::Ready(Ok(()));
+            }
+
+            match Pin::new(&mut this.remote_fin_rx).poll(cx) {
+                Poll::Ready(_) => {
+                    this.deny_rw(StreamFlags::R);
+                    return Poll::Ready(Ok(()));
+                }
+                Poll::Pending => {}
             }
 
             match Pin::new(&mut this.frame_rx).poll_recv(cx) {
@@ -215,8 +226,14 @@ impl AsyncWrite for Stream {
         if let Some(fut) = self.cur_write_fut.as_mut() {
             match fut.as_mut().poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),
-                Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::other(e.to_string()))),
+                Poll::Ready(Ok(_)) => {
+                    self.cur_write_fut = None;
+                    Poll::Ready(Ok(()))
+                }
+                Poll::Ready(Err(e)) => {
+                    self.cur_write_fut = None;
+                    Poll::Ready(Err(std::io::Error::other(e.to_string())))
+                }
             }
         } else {
             Poll::Ready(Ok(()))
@@ -225,22 +242,8 @@ impl AsyncWrite for Stream {
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
         Poll::Ready(Ok(()))
-    }
-}
-
-// Listen for remote FIN signal and handle stream closure
-//
-// This function runs in a separate background task and waits for the remote peer to send
-// a FIN signal. When received, it disables write operations on the stream.
-async fn listen_fin(remote_fin_rx: oneshot::Receiver<()>, stream_wrapper: StreamPtrWrapper) {
-    if (remote_fin_rx.await).is_ok() {
-        unsafe {
-            if let Some(stream) = stream_wrapper.0.as_mut() {
-                stream.deny_rw(StreamFlags::W);
-            }
-        }
     }
 }

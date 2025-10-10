@@ -60,7 +60,7 @@ pub(crate) async fn start_frame_dispatch_loop(
                     None => {
                         return;
                     }
-                    Some(Err(e)) => {
+                    Some(Err(_)) => {
                         return;
                     }
                 }
