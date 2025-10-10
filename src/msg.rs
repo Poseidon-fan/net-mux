@@ -64,3 +64,11 @@ pub(crate) async fn send_fin(
 ) -> Result<usize, Error> {
     send_frame(msg_tx, Frame::new_fin(stream_id)).await
 }
+
+// Sends a ACK (acknowledgment) frame to acknowledge a stream.
+pub(crate) async fn send_ack(
+    msg_tx: mpsc::Sender<Message>,
+    stream_id: StreamId,
+) -> Result<usize, Error> {
+    send_frame(msg_tx, Frame::new_ack(stream_id)).await
+}

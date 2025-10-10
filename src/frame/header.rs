@@ -30,10 +30,12 @@ pub(crate) struct Header {
 pub(crate) enum Cmd {
     // SYN (Synchronize) - Establish a new stream
     Syn = 0x01,
+    // ACK (Acknowledgment) - Acknowledge a stream
+    Ack = 0x02,
     // FIN (Finish) - Close a stream
-    Fin = 0x02,
+    Fin = 0x03,
     // PSH (Push) - Send data payload
-    Psh = 0x03,
+    Psh = 0x04,
 }
 
 pub(crate) type DataLength = u16;
@@ -46,8 +48,9 @@ impl TryFrom<u8> for Cmd {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0x01 => Ok(Cmd::Syn),
-            0x02 => Ok(Cmd::Fin),
-            0x03 => Ok(Cmd::Psh),
+            0x02 => Ok(Cmd::Ack),
+            0x03 => Ok(Cmd::Fin),
+            0x04 => Ok(Cmd::Psh),
             _ => Err(Error::InvalidCmd(value)),
         }
     }

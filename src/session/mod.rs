@@ -150,9 +150,13 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
             close_tx,
             remote_fin_rx,
         );
-        msg::send_syn(msg_tx, stream_id).await?;
+        let (remote_ack_tx, remote_ack_rx) = oneshot::channel();
         self.stream_manager
-            .add_stream(stream_id, frame_tx, remote_fin_tx)?;
+            .add_stream(stream_id, frame_tx, remote_fin_tx, Some(remote_ack_tx))?;
+        msg::send_syn(msg_tx, stream_id).await?;
+        remote_ack_rx
+            .await
+            .map_err(|_| Error::Internal("remote ack rx not found".to_string()))?;
 
         Ok(stream)
     }
@@ -186,7 +190,8 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
             remote_fin_rx,
         );
         self.stream_manager
-            .add_stream(stream_id, frame_tx, remote_fin_tx)?;
+            .add_stream(stream_id, frame_tx, remote_fin_tx, None)?;
+        msg::send_ack(self.msg_tx.clone(), stream_id).await?;
 
         Ok(stream)
     }

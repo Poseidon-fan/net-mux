@@ -69,6 +69,14 @@ impl Frame {
         }
     }
 
+    // Creates a new ACK (acknowledgment) frame
+    pub fn new_ack(stream_id: StreamId) -> Self {
+        Self {
+            header: Header::new(PROTOCOL_V0, Cmd::Ack, 0, stream_id),
+            data: vec![],
+        }
+    }
+
     // Calculates the total length of the frame in bytes
     pub fn frame_len(&self) -> usize {
         HEADER_LENGTH + self.header.data_length as usize

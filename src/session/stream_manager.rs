@@ -18,6 +18,7 @@ pub(crate) struct StreamManager {
 pub(crate) struct StreamHandle {
     frame_tx: mpsc::Sender<Frame>,
     remote_fin_tx: Option<oneshot::Sender<()>>,
+    remote_ack_tx: Option<oneshot::Sender<()>>,
 }
 
 impl StreamManager {
@@ -33,10 +34,12 @@ impl StreamManager {
         stream_id: StreamId,
         frame_tx: mpsc::Sender<Frame>,
         remote_fin_tx: oneshot::Sender<()>,
+        remote_ack_tx: Option<oneshot::Sender<()>>,
     ) -> Result<(), Error> {
         let stream_handle = StreamHandle {
             frame_tx,
             remote_fin_tx: Some(remote_fin_tx),
+            remote_ack_tx,
         };
 
         let mut streams_guard = self.streams.lock();
@@ -64,11 +67,21 @@ impl StreamManager {
                 .stream_creation_tx
                 .send(stream_id)
                 .map_err(|_| Error::SendFrameFailed(stream_id)),
+            Cmd::Ack => self
+                .streams
+                .lock()
+                .get_mut(&stream_id)
+                .ok_or(Error::StreamNotFound(stream_id))?
+                .remote_ack_tx
+                .take()
+                .ok_or(Error::Internal("remote ack tx not found".to_string()))?
+                .send(())
+                .map_err(|_| Error::SendFrameFailed(stream_id)),
             Cmd::Fin => self
                 .streams
                 .lock()
                 .get_mut(&stream_id)
-                .ok_or(Error::SendMessageFailed)?
+                .ok_or(Error::StreamNotFound(stream_id))?
                 .remote_fin_tx
                 .take()
                 .ok_or(Error::Internal("remote fin tx not found".to_string()))?
