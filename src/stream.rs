@@ -15,6 +15,7 @@ use std::{
     cmp,
     future::Future,
     pin::Pin,
+    sync::OnceLock,
     task::{Context, Poll},
 };
 
@@ -53,6 +54,8 @@ pub struct Stream {
     frame_rx: mpsc::UnboundedReceiver<Frame>,
     remote_fin_rx: oneshot::Receiver<()>,
     close_tx: mpsc::UnboundedSender<StreamId>,
+
+    close_once: OnceLock<()>,
 }
 
 bitflags! {
@@ -77,8 +80,10 @@ impl Stream {
     /// The stream will be automatically cleaned up when both read and write
     /// operations are disabled.
     pub fn close(&self) {
-        let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id);
-        self.deny_rw(StreamFlags::W);
+        self.close_once.get_or_init(|| {
+            self.deny_rw(StreamFlags::W);
+            let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id);
+        });
     }
 
     // Create a new stream and listen remote fin signal.
@@ -100,6 +105,7 @@ impl Stream {
             frame_rx,
             close_tx,
             remote_fin_rx,
+            close_once: OnceLock::new(),
         }
     }
 
@@ -165,7 +171,7 @@ impl AsyncRead for Stream {
                     return Poll::Pending;
                 }
                 Poll::Ready(None) => {
-                    unreachable!()
+                    return Poll::Ready(Ok(()));
                 }
             }
         }
@@ -238,9 +244,26 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_shutdown(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        Poll::Ready(Ok(()))
+        let res = match &mut self.cur_write_fut {
+            Some(fut) => match fut.as_mut().poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(Ok(_)) => {
+                    self.cur_write_fut = None;
+                    Poll::Ready(Ok(()))
+                }
+                Poll::Ready(Err(e)) => {
+                    self.cur_write_fut = None;
+                    Poll::Ready(Err(std::io::Error::other(e.to_string())))
+                }
+            },
+            None => Poll::Ready(Ok(())),
+        };
+        if !res.is_pending() {
+            self.close();
+        }
+        res
     }
 }
