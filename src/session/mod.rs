@@ -54,7 +54,7 @@ use crate::{
 /// over a single underlying connection. Each session can handle multiple streams simultaneously,
 /// with each stream having its own unique stream ID and lifecycle.
 pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
-    config: Config,
+    _config: Config,
     stream_id_allocator: StreamIdAllocator,
     stream_manager: Arc<StreamManager>,
 
@@ -65,7 +65,7 @@ pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     is_shutdown: AtomicBool,
 
     // contains here to copy to new Stream
-    msg_tx: mpsc::Sender<Message>,
+    msg_tx: mpsc::UnboundedSender<Message>,
     close_tx: mpsc::UnboundedSender<StreamId>,
 
     _phantom: PhantomData<T>,
@@ -74,7 +74,7 @@ pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
 impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
     fn new(conn: T, config: Config, mode: SessionMode) -> Self {
         let (conn_reader, conn_writer) = io::split(conn);
-        let (msg_tx, msg_rx) = mpsc::channel(config.conn_send_window_size);
+        let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (close_tx, close_rx) = mpsc::unbounded_channel();
         let (stream_creation_tx, stream_creation_rx) = mpsc::unbounded_channel();
         let (shutdown_tx, shutdown_rx1) = broadcast::channel(1);
@@ -82,7 +82,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         let shutdown_rx3 = shutdown_tx.subscribe();
 
         let session = Self {
-            config,
+            _config: config,
             stream_id_allocator: StreamIdAllocator::new(match mode {
                 SERVER_MODE => ODD_START_STREAM_ID,
                 CLIENT_MODE => EVEN_START_STREAM_ID,
@@ -139,7 +139,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         let close_tx = self.close_tx.clone();
         let msg_tx = self.msg_tx.clone();
         let stream_id = self.stream_id_allocator.allocate();
-        let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
+        let (frame_tx, frame_rx) = mpsc::unbounded_channel();
         let (remote_fin_tx, remote_fin_rx) = oneshot::channel();
 
         let stream = Stream::new(
@@ -178,7 +178,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         let shutdown_rx = self.shutdown_tx.subscribe();
         let close_tx = self.close_tx.clone();
         let msg_tx = self.msg_tx.clone();
-        let (frame_tx, frame_rx) = mpsc::channel(self.config.stream_recv_window_size);
+        let (frame_tx, frame_rx) = mpsc::unbounded_channel();
         let (remote_fin_tx, remote_fin_rx) = oneshot::channel();
 
         let stream = Stream::new(

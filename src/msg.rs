@@ -26,14 +26,11 @@ impl Message {
 //
 // This is a helper function that encapsulates the common pattern of creating
 // a message, sending it through the message channel, and waiting for the result.
-async fn send_frame(msg_tx: mpsc::Sender<Message>, frame: Frame) -> Result<usize, Error> {
+async fn send_frame(msg_tx: mpsc::UnboundedSender<Message>, frame: Frame) -> Result<usize, Error> {
     let (msg, res_rx) = Message::new(frame);
 
     // Send the message to the session manager
-    msg_tx
-        .send(msg)
-        .await
-        .map_err(|_| Error::SendMessageFailed)?;
+    msg_tx.send(msg).map_err(|_| Error::SendMessageFailed)?;
 
     // Wait for the transmission result
     // TODO(Poseidon): Add timeout handling for better error recovery
@@ -42,7 +39,7 @@ async fn send_frame(msg_tx: mpsc::Sender<Message>, frame: Frame) -> Result<usize
 
 // Sends a SYN (synchronize) frame to establish a new stream.
 pub(crate) async fn send_syn(
-    msg_tx: mpsc::Sender<Message>,
+    msg_tx: mpsc::UnboundedSender<Message>,
     stream_id: StreamId,
 ) -> Result<usize, Error> {
     send_frame(msg_tx, Frame::new_syn(stream_id)).await
@@ -50,7 +47,7 @@ pub(crate) async fn send_syn(
 
 // Sends a PSH (push) frame containing data.
 pub(crate) async fn send_psh(
-    msg_tx: mpsc::Sender<Message>,
+    msg_tx: mpsc::UnboundedSender<Message>,
     stream_id: StreamId,
     data: &[u8],
 ) -> Result<usize, Error> {
@@ -58,16 +55,23 @@ pub(crate) async fn send_psh(
 }
 
 // Sends a FIN (finish) frame to close a stream.
-pub(crate) async fn send_fin(
-    msg_tx: mpsc::Sender<Message>,
+pub(crate) fn send_fin(
+    msg_tx: mpsc::UnboundedSender<Message>,
     stream_id: StreamId,
-) -> Result<usize, Error> {
-    send_frame(msg_tx, Frame::new_fin(stream_id)).await
+) -> Result<(), Error> {
+    let frame = Frame::new_fin(stream_id);
+    let (msg, _) = Message::new(frame);
+
+    // Send the message to the session manager
+    msg_tx
+        .send(msg)
+        .map_err(|_| Error::SendMessageFailed)
+        .map_err(|_| Error::SendMessageFailed)
 }
 
 // Sends a ACK (acknowledgment) frame to acknowledge a stream.
 pub(crate) async fn send_ack(
-    msg_tx: mpsc::Sender<Message>,
+    msg_tx: mpsc::UnboundedSender<Message>,
     stream_id: StreamId,
 ) -> Result<usize, Error> {
     send_frame(msg_tx, Frame::new_ack(stream_id)).await

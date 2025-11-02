@@ -14,7 +14,7 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 // Collects the `Message` from `Stream`s,
 // send the inner `Frame` out and write back the result `Stream`.
 pub(crate) async fn start_msg_collect_loop(
-    mut msg_rx: mpsc::Receiver<Message>,
+    mut msg_rx: mpsc::UnboundedReceiver<Message>,
     mut conn_writer: impl AsyncWrite + Unpin,
     mut shutdown_rx: broadcast::Receiver<()>,
 ) {

@@ -49,8 +49,8 @@ pub struct Stream {
 
     _shutdown_rx: broadcast::Receiver<()>,
 
-    msg_tx: mpsc::Sender<Message>,
-    frame_rx: mpsc::Receiver<Frame>,
+    msg_tx: mpsc::UnboundedSender<Message>,
+    frame_rx: mpsc::UnboundedReceiver<Frame>,
     remote_fin_rx: oneshot::Receiver<()>,
     close_tx: mpsc::UnboundedSender<StreamId>,
 }
@@ -76,8 +76,8 @@ impl Stream {
     /// Sends a FIN message to the remote peer and disables write operations.
     /// The stream will be automatically cleaned up when both read and write
     /// operations are disabled.
-    pub async fn close(&self) {
-        let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id).await;
+    pub fn close(&self) {
+        let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id);
         self.deny_rw(StreamFlags::W);
     }
 
@@ -85,8 +85,8 @@ impl Stream {
     pub(crate) fn new(
         stream_id: StreamId,
         shutdown_rx: broadcast::Receiver<()>,
-        msg_tx: mpsc::Sender<Message>,
-        frame_rx: mpsc::Receiver<Frame>,
+        msg_tx: mpsc::UnboundedSender<Message>,
+        frame_rx: mpsc::UnboundedReceiver<Frame>,
         close_tx: mpsc::UnboundedSender<StreamId>,
         remote_fin_rx: oneshot::Receiver<()>,
     ) -> Self {
@@ -120,12 +120,10 @@ impl Stream {
 
 impl Drop for Stream {
     fn drop(&mut self) {
+        if self.status.read().contains(StreamFlags::W) {
+            let _ = msg::send_fin(self.msg_tx.clone(), self.stream_id);
+        }
         self.deny_rw(StreamFlags::V);
-        let msg_tx = self.msg_tx.clone();
-        let stream_id = self.stream_id;
-        tokio::spawn(async move {
-            let _ = msg::send_fin(msg_tx, stream_id).await;
-        });
     }
 }
 
@@ -151,20 +149,19 @@ impl AsyncRead for Stream {
                 return Poll::Ready(Ok(()));
             }
 
-            match Pin::new(&mut this.remote_fin_rx).poll(cx) {
-                Poll::Ready(_) => {
-                    this.deny_rw(StreamFlags::R);
-                    return Poll::Ready(Ok(()));
-                }
-                Poll::Pending => {}
-            }
-
             match Pin::new(&mut this.frame_rx).poll_recv(cx) {
                 Poll::Ready(Some(frame)) => {
                     this.read_buf = Bytes::from(frame.data);
                     continue;
                 }
                 Poll::Pending => {
+                    match Pin::new(&mut this.remote_fin_rx).poll(cx) {
+                        Poll::Ready(_) => {
+                            this.deny_rw(StreamFlags::R);
+                            return Poll::Ready(Ok(()));
+                        }
+                        Poll::Pending => {}
+                    }
                     return Poll::Pending;
                 }
                 Poll::Ready(None) => {
