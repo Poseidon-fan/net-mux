@@ -54,7 +54,7 @@ use crate::{
 /// over a single underlying connection. Each session can handle multiple streams simultaneously,
 /// with each stream having its own unique stream ID and lifecycle.
 pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
-    _config: Config,
+    config: Config,
     stream_id_allocator: StreamIdAllocator,
     stream_manager: Arc<StreamManager>,
 
@@ -82,7 +82,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         let shutdown_rx3 = shutdown_tx.subscribe();
 
         let session = Self {
-            _config: config,
+            config,
             stream_id_allocator: StreamIdAllocator::new(match mode {
                 SERVER_MODE => ODD_START_STREAM_ID,
                 CLIENT_MODE => EVEN_START_STREAM_ID,
@@ -139,7 +139,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         let close_tx = self.close_tx.clone();
         let msg_tx = self.msg_tx.clone();
         let stream_id = self.stream_id_allocator.allocate();
-        let (frame_tx, frame_rx) = mpsc::unbounded_channel();
+        let (frame_tx, frame_rx) = mpsc::channel(self.config.frame_window_size);
         let (remote_fin_tx, remote_fin_rx) = oneshot::channel();
 
         let stream = Stream::new(
@@ -178,7 +178,7 @@ impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
         let shutdown_rx = self.shutdown_tx.subscribe();
         let close_tx = self.close_tx.clone();
         let msg_tx = self.msg_tx.clone();
-        let (frame_tx, frame_rx) = mpsc::unbounded_channel();
+        let (frame_tx, frame_rx) = mpsc::channel(self.config.frame_window_size);
         let (remote_fin_tx, remote_fin_rx) = oneshot::channel();
 
         let stream = Stream::new(

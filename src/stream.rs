@@ -51,7 +51,7 @@ pub struct Stream {
     _shutdown_rx: broadcast::Receiver<()>,
 
     msg_tx: mpsc::UnboundedSender<Message>,
-    frame_rx: mpsc::UnboundedReceiver<Frame>,
+    frame_rx: mpsc::Receiver<Frame>,
     remote_fin_rx: oneshot::Receiver<()>,
     close_tx: mpsc::UnboundedSender<StreamId>,
 
@@ -91,7 +91,7 @@ impl Stream {
         stream_id: StreamId,
         shutdown_rx: broadcast::Receiver<()>,
         msg_tx: mpsc::UnboundedSender<Message>,
-        frame_rx: mpsc::UnboundedReceiver<Frame>,
+        frame_rx: mpsc::Receiver<Frame>,
         close_tx: mpsc::UnboundedSender<StreamId>,
         remote_fin_rx: oneshot::Receiver<()>,
     ) -> Self {
