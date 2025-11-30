@@ -27,6 +27,7 @@
 mod stream_manager;
 mod task;
 
+use std::marker::PhantomData;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -52,7 +53,7 @@ use crate::{
 /// `Session` is the core component of network multiplexing, managing multiple independent streams
 /// over a single underlying connection. Each session can handle multiple streams simultaneously,
 /// with each stream having its own unique stream ID and lifecycle.
-pub struct Session {
+pub struct Session<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> {
     config: Config,
     stream_id_allocator: StreamIdAllocator,
     stream_manager: Arc<StreamManager>,
@@ -66,13 +67,12 @@ pub struct Session {
     // contains here to copy to new Stream
     msg_tx: mpsc::UnboundedSender<Message>,
     close_tx: mpsc::UnboundedSender<StreamId>,
+
+    _phantom: PhantomData<T>,
 }
 
-impl Session {
-    fn new<T>(conn: T, config: Config, mode: SessionMode) -> Self
-    where
-        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+impl<T: AsyncRead + AsyncWrite + Send + Unpin + 'static> Session<T> {
+    fn new(conn: T, config: Config, mode: SessionMode) -> Self {
         let (conn_reader, conn_writer) = io::split(conn);
         let (msg_tx, msg_rx) = mpsc::unbounded_channel();
         let (close_tx, close_rx) = mpsc::unbounded_channel();
@@ -94,6 +94,7 @@ impl Session {
             is_shutdown: AtomicBool::new(false),
             msg_tx,
             close_tx,
+            _phantom: PhantomData,
         };
 
         tokio::spawn(task::start_msg_collect_loop(
@@ -116,18 +117,12 @@ impl Session {
     }
 
     /// Create a server session.
-    pub fn server<T>(conn: T, config: Config) -> Self
-    where
-        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+    pub fn server(conn: T, config: Config) -> Self {
         Self::new(conn, config, SERVER_MODE)
     }
 
     /// Create a client session.
-    pub fn client<T>(conn: T, config: Config) -> Self
-    where
-        T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+    pub fn client(conn: T, config: Config) -> Self {
         Self::new(conn, config, CLIENT_MODE)
     }
 
