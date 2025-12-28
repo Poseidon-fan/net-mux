@@ -40,7 +40,3 @@ This launches a TCP listener on the local loopback address, waiting for client c
 
 [examples]: https://github.com/Poseidon-fan/net-mux/tree/master/examples
 [documentation]: https://docs.rs/crate/net-mux/
-
-## Contribution
-
-The project is currently under active development, all feedback welcome!
