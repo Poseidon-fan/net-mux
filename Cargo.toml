@@ -23,7 +23,7 @@ tokio = { version = "1", default-features = false, features = [
     "parking_lot",
 ] }
 futures-util = { version = "0.3.31", features = ["sink"] }
-tokio-util = { version = "0.7.17", features = ["codec"] }
+tokio-util = { version = "0.7.18", features = ["codec"] }
 parking_lot = "0.12.5"
 bitflags = "2.10.0"
 
