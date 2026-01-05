@@ -26,12 +26,23 @@ net-mux is an asynchronous connection multiplexing library built on tokio. It mu
 
 **Examples**
 
+### Echo Service
+
 ```sh
 $ cargo run --example tcp_server
 $ cargo run --example tcp_client
 ```
 
 This launches a TCP listener on the local loopback address, waiting for client connections. Each connection is wrapped as a mux session. The server and client interact over this single connection through multiple streams. The server receives messages from the client and writes them back unchanged, while the client reads strings from the standard input, sends them to the server, and prints the received messages.
+
+### Forward Service
+
+```sh
+$ cargo run --example forward_server
+$ cargo run --example forward_client
+```
+
+This launches a forward server and client. The server listens on port 7777 for client connections and listens on port 8001 to forward its data to the client. The client connects to the server's port 7777 and forwards data from the local port 8000. If you start an HTTP service on port 8000 (e.g., `python -m http.server 8000`), you can access it via `http://127.0.0.1:8001`.
 
 **Links**
 
