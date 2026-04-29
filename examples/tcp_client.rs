@@ -1,33 +1,29 @@
+//! Echo client. Each line typed on stdin is sent over a fresh multiplexed
+//! stream and the response is printed.
+
+use anyhow::Result;
 use net_mux::{Config, Session};
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     let conn = TcpStream::connect("127.0.0.1:7777").await?;
     conn.set_nodelay(true)?;
-    println!("Connected to server!");
-
     let session = Session::client(conn, Config::default());
-    println!("session starting");
 
-    loop {
-        let stream = session.open().await?;
-        let (read_half, mut write_half) = io::split(stream);
+    let mut stdin = BufReader::new(io::stdin()).lines();
+    while let Some(line) = stdin.next_line().await? {
+        let mut stream = session.open().await?;
+        stream.write_all(line.as_bytes()).await?;
+        stream.write_all(b"\n").await?;
+        stream.shutdown().await?;
 
-        let mut reader = BufReader::new(read_half);
-        let mut stdin = io::BufReader::new(io::stdin());
-
-        let mut line_to_send = String::new();
-        let mut server_response = String::new();
-
-        let _ = stdin.read_line(&mut line_to_send).await?;
-        write_half.write_all(line_to_send.as_bytes()).await?;
-        write_half.flush().await?;
-        line_to_send.clear();
-
-        let _ = reader.read_line(&mut server_response).await?;
-        println!("Server response: {}", server_response);
-        server_response.clear();
+        let mut response = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut response).await?;
+        print!("{}", String::from_utf8_lossy(&response));
     }
+
+    session.close().await;
+    Ok(())
 }

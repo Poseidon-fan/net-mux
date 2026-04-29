@@ -18,36 +18,97 @@
 [github-badge]: https://img.shields.io/badge/github-repo-black?logo=github
 [github-url]: https://github.com/Poseidon-fan/net-mux
 
-net-mux is an asynchronous connection multiplexing library built on tokio. It multiplexes ordered, connection-oriented transports such as TCP, KCP, and TLS-over-TCP into multiple logical concurrent, ordered, bidirectional streams.
+`net-mux` is an asynchronous connection multiplexing library built on
+Tokio. It turns a single ordered, connection-oriented byte stream
+(TCP, TLS-over-TCP, KCP, ...) into many concurrent bidirectional logical
+streams.
 
-![system architecture](https://github.com/Poseidon-fan/net-mux/raw/master/docs/images/architecture.svg)
+## Features
 
-## Getting Started
+- **Credit-based per-stream flow control.** Slow consumers do not stall
+  other streams; total memory is bounded by `max_streams *
+  initial_stream_window`.
+- **Correct `AsyncRead` / `AsyncWrite`.** Large user writes are
+  transparently fragmented; back-pressure surfaces as `Poll::Pending`.
+- **Half-close.** `shutdown()` closes only the write half, mirroring TCP
+  semantics.
+- **Keepalive.** Periodic `Ping` frames with timeout-driven session
+  shutdown.
+- **Graceful close.** `Session::close().await` flushes outstanding frames,
+  emits a `GoAway`, and joins all background tasks.
+- **Lock-free hot paths.** Atomic windows, atomic stream state, single
+  outbound queue.
 
-**Examples**
+See [`docs/architecture.md`](docs/architecture.md) and
+[`docs/protocol.md`](docs/protocol.md) for the deeper design notes.
 
-### Echo Service
+## Quick start
+
+```rust,no_run
+use net_mux::{Config, Session};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let conn = TcpStream::connect("127.0.0.1:7777").await?;
+    let session = Session::client(conn, Config::default());
+
+    let mut stream = session.open().await?;
+    stream.write_all(b"hello\n").await?;
+    stream.shutdown().await?;
+
+    let mut buf = Vec::new();
+    stream.read_to_end(&mut buf).await?;
+    println!("{}", String::from_utf8_lossy(&buf));
+
+    session.close().await;
+    Ok(())
+}
+```
+
+## Examples
+
+### Echo
 
 ```sh
 $ cargo run --example tcp_server
 $ cargo run --example tcp_client
 ```
 
-This launches a TCP listener on the local loopback address, waiting for client connections. Each connection is wrapped as a mux session. The server and client interact over this single connection through multiple streams. The server receives messages from the client and writes them back unchanged, while the client reads strings from the standard input, sends them to the server, and prints the received messages.
+The server echoes each line received over a fresh multiplexed stream;
+the client reads stdin, opens one stream per line, and prints the reply.
 
-### Forward Service
+### Reverse tunnel
 
 ```sh
-$ cargo run --example forward_server
-$ cargo run --example forward_client
+$ cargo run --example forward_server   # listens on :7777 (transport) and :8001 (proxy)
+$ cargo run --example forward_client   # connects to :7777, forwards to :8000
 ```
 
-This launches a forward server and client. The server listens on port 7777 for client connections and listens on port 8001 to forward its data to the client. The client connects to the server's port 7777 and forwards data from the local port 8000. If you start an HTTP service on port 8000 (e.g., `python -m http.server 8000`), you can access it via `http://127.0.0.1:8001`.
+If you start an HTTP service on `127.0.0.1:8000`
+(e.g. `python -m http.server 8000`), it becomes reachable on
+`http://127.0.0.1:8001` via the tunnel.
 
-**Links**
+## Configuration
 
-- Usage [examples][examples]
-- Released API [Docs][documentation]
+```rust
+use net_mux::Config;
+use std::time::Duration;
+
+let cfg = Config::builder()
+    .initial_stream_window(512 * 1024)
+    .max_frame_size(64 * 1024)
+    .max_streams(2048)
+    .keepalive_interval(Some(Duration::from_secs(30)))
+    .build();
+```
+
+## Links
+
+- API [docs][documentation]
+- Source [examples][examples]
+- Wire-protocol [spec](docs/protocol.md)
 
 [examples]: https://github.com/Poseidon-fan/net-mux/tree/master/examples
 [documentation]: https://docs.rs/crate/net-mux/

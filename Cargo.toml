@@ -1,32 +1,48 @@
 [package]
 name = "net-mux"
-version = "0.2.4"
+version = "1.0.0"
 authors = ["Poseidon <18646154381@163.com>"]
 edition = "2024"
-description = "A Net Stream Multiplexing Library"
+description = "An async, credit-based connection multiplexing library on top of Tokio"
 documentation = "https://docs.rs/net-mux"
 readme = "README.md"
 repository = "https://github.com/poseidon-fan/net-mux"
 license = "MIT"
-keywords = ["net", "multiplexing", "async", "tokio"]
+keywords = ["net", "multiplexing", "async", "tokio", "stream"]
 categories = ["asynchronous", "network-programming"]
-exclude = [".devcontainer/"]
+exclude = [".devcontainer/", "ref/", "docs/images/"]
 
 [dependencies]
+bitflags = "2.11"
+bytes = "1.10"
+futures-util = { version = "0.3", default-features = false, features = [
+    "sink",
+    "std",
+] }
+parking_lot = "0.12"
 thiserror = "2"
 tokio = { version = "1", default-features = false, features = [
     "rt",
-    "rt-multi-thread",
     "macros",
     "io-util",
+    "sync",
     "time",
     "parking_lot",
 ] }
-futures-util = { version = "0.3.32", features = ["sink"] }
-tokio-util = { version = "0.7.18", features = ["codec"] }
-parking_lot = "0.12.5"
-bitflags = "2.11.1"
+tokio-util = { version = "0.7", default-features = false, features = ["codec"] }
+tracing = { version = "0.1", default-features = false, features = [
+    "std",
+    "attributes",
+] }
 
 [dev-dependencies]
+anyhow = "1"
+criterion = { version = "0.5", features = ["async_tokio"] }
+proptest = "1"
 tokio = { version = "1", features = ["full"] }
-anyhow = "1.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bench]]
+name = "throughput"
+path = "benches/throughput.rs"
+harness = false
