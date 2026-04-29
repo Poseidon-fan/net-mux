@@ -1,6 +1,6 @@
 [package]
 name = "net-mux"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Poseidon <18646154381@163.com>"]
 edition = "2024"
 description = "An async, credit-based connection multiplexing library on top of Tokio"
