@@ -20,6 +20,7 @@ mod manager;
 mod reader;
 mod writer;
 
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -38,40 +39,52 @@ use crate::util::id::{Role, StreamIdAllocator};
 use inner::SessionInner;
 use manager::StreamRegistry;
 
-/// Multiplexed session over a single connection.
+/// Multiplexed session over a single connection of type `T`.
 ///
-/// `Session` is cheap to clone — it is internally an `Arc` — so multiple
+/// The transport type `T` is fixed at construction time and is part of the
+/// session's identity; `Session<TcpStream>` and `Session<DuplexStream>`
+/// are distinct types. Internally the transport is consumed by background
+/// tasks the moment the session is built, so `T` does not appear on any
+/// other method signature.
+///
+/// `Session<T>` is cheap to clone — it is internally an `Arc` — so multiple
 /// tasks can share the same session and concurrently call [`open`] / read
 /// from streams. [`accept`], by contrast, expects a single owner.
 ///
 /// [`open`]: Session::open
 /// [`accept`]: Session::accept
-#[derive(Clone)]
-pub struct Session {
+pub struct Session<T> {
     inner: Arc<SessionInner>,
+    // `T` is consumed in `new` and never held afterwards; the marker is
+    // here so that the type is part of the public identity of the session.
+    // Using `fn() -> T` keeps `Session<T>: Send + Sync` regardless of `T`.
+    _phantom: PhantomData<fn() -> T>,
 }
 
-impl Session {
+impl<T> Clone for Session<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<T> Session<T>
+where
+    T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     /// Construct a session that initiates new streams (odd ids).
-    pub fn client<C>(conn: C, config: Config) -> Self
-    where
-        C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+    pub fn client(conn: T, config: Config) -> Self {
         Self::new(conn, config, Role::Client)
     }
 
     /// Construct a session that accepts streams from the peer (even ids).
-    pub fn server<C>(conn: C, config: Config) -> Self
-    where
-        C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+    pub fn server(conn: T, config: Config) -> Self {
         Self::new(conn, config, Role::Server)
     }
 
-    fn new<C>(conn: C, config: Config, role: Role) -> Self
-    where
-        C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
+    fn new(conn: T, config: Config, role: Role) -> Self {
         let config = Arc::new(config);
         let (read_half, write_half) = io::split(conn);
 
@@ -133,9 +146,16 @@ impl Session {
             *guard = Some(joinset);
         }
 
-        Self { inner }
+        Self {
+            inner,
+            _phantom: PhantomData,
+        }
     }
+}
 
+// Methods that don't actually touch the transport stay free of the `T`
+// bound, so call sites read as cleanly as before.
+impl<T> Session<T> {
     /// Open a new outbound stream.
     ///
     /// Sends `SYN` to the peer and resolves once the peer's `ACK` arrives or

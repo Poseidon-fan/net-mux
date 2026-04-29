@@ -8,10 +8,12 @@ use std::time::Duration;
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use net_mux::{Config, Session};
-use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
+use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream, duplex};
 use tokio::runtime::Builder;
 
-fn make_pair(window: u32, frame: u32) -> (Session, Session) {
+type DuplexSession = Session<DuplexStream>;
+
+fn make_pair(window: u32, frame: u32) -> (DuplexSession, DuplexSession) {
     let (a, b) = duplex(1024 * 1024);
     let cfg = Config::builder()
         .initial_stream_window(window)

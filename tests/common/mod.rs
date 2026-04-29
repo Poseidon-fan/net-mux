@@ -3,15 +3,17 @@
 #![allow(dead_code)]
 
 use net_mux::{Config, Session};
-use tokio::io::duplex;
+use tokio::io::{DuplexStream, duplex};
+
+pub type DuplexSession = Session<DuplexStream>;
 
 /// Build a paired (client, server) session over an in-memory `duplex` pipe.
-pub fn pair(buf_size: usize) -> (Session, Session) {
+pub fn pair(buf_size: usize) -> (DuplexSession, DuplexSession) {
     pair_with(buf_size, |c| c)
 }
 
 /// Build a paired session with caller-supplied configuration.
-pub fn pair_with<F>(buf_size: usize, customize: F) -> (Session, Session)
+pub fn pair_with<F>(buf_size: usize, customize: F) -> (DuplexSession, DuplexSession)
 where
     F: Fn(Config) -> Config,
 {
