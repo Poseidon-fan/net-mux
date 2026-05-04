@@ -14,7 +14,7 @@ exclude = [".devcontainer/", "ref/", "docs/images/"]
 
 [dependencies]
 bitflags = "2.11"
-bytes = "1.10"
+bytes = "1.11"
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
